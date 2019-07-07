@@ -199,7 +199,7 @@ Function LC_CleanupDirectory {
 } #EndFunction LC_CleanupDirectory
 Export-ModuleMember -Function 'LC_CleanupDirectory'
 
-function LC_IsAdmin {
+Function LC_IsAdmin {
     <#
         .SYNOPSIS
             LC_IsAdmin
