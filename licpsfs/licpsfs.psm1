@@ -137,6 +137,7 @@ Function LC_DeleteDirectory {
         Write-Verbose "END FUNCTION - $FunctionName"
     }
 } #EndFunction LC_DeleteDirectory
+Export-ModuleMember -Function 'LC_DeleteDirectory'
 
 Function LC_CleanupDirectory {
     <#
@@ -196,3 +197,4 @@ Function LC_CleanupDirectory {
         Write-Verbose "END FUNCTION - $FunctionName"
     }
 } #EndFunction LC_CleanupDirectory
+Export-ModuleMember -Function 'LC_CleanupDirectory'
