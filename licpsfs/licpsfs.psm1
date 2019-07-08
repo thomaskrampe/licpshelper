@@ -19,6 +19,7 @@
             OF SUCH DAMAGES IN ADVANCE.
 #>
 
+# Filesystem
 Function LC_DeleteFile {
     <#
         .SYNOPSIS
@@ -207,8 +208,8 @@ Function LC_IsAdmin {
             Check if the user running this script has admin permissions
         .EXAMPLE
             LC_IsAdmin
-        .RETURN
-            $True or $False
+        .OUTPUTS
+            Boolean
         .NOTES
             Author        : Thomas Krampe | t.krampe@loginconsultants.de
             Version       : 1.1
