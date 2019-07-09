@@ -27,7 +27,7 @@
 $global:ErrorActionPreference = "Stop"
 if ($verbose) { $global:VerbosePreference = "Continue" }
 
-# FILES AND FOLDERS
+#region begin FILES AND FOLDERS
 Function LC_DeleteDirectory {
     <#
         .SYNOPSIS
@@ -205,7 +205,6 @@ Function LC_CreateDirectory {
 }
 Export-ModuleMember -Function 'LC_CreateDirectory'
 
-## File functions
 Function LC_DeleteFile {
     <#
         .SYNOPSIS
@@ -381,11 +380,178 @@ Function LC_RenameItem {
     }
 }
 Export-ModuleMember -Function 'LC_RenameItem'
+#endregion
 
-# INSTALLATIONS AND EXECUTABLES
+#region begin INSTALLATIONS AND EXECUTABLES
+Function LC_ExecuteProcess {
+    <#
+        .SYNOPSIS
+        Execute a process
+        .DESCRIPTION
+        Execute a process
+        .PARAMETER FileName
+        This parameter contains the full path including the file name and file extension of the executable (for example C:\Temp\MyApp.exe).
+        .PARAMETER Arguments
+        This parameter contains the list of arguments to be executed together with the executable
+        .EXAMPLE
+        LC_ExecuteProcess -FileName "C:\Temp\MyApp.exe" -Arguments "-silent"
+        Executes the file 'MyApp.exe' with arguments '-silent'
+    #>
+    [CmdletBinding()]
+    Param( 
+        [Parameter(Mandatory = $true, Position = 0)][String]$FileName,
+        [Parameter(Mandatory = $true, Position = 1)][String]$Arguments
+    )
 
+    begin {
+        [string]$FunctionName = $PSCmdlet.MyInvocation.MyCommand.Name
+        Write-Verbose "START FUNCTION - $FunctionName" 
+    }
+ 
+    process {
+        $Process = Start-Process $FileName -ArgumentList $Arguments -wait -NoNewWindow -PassThru
+        $Process.HasExited
+        $ProcessExitCode = $Process.ExitCode
+        if ( $ProcessExitCode -eq 0 ) {
+            Write-Verbose "The process '$Filename' with arguments '$Arguments' ended successfully" $LogFile
+        }
+        else {
+            Write-Error "An error occurred trying to execute the process '$Filename' with arguments '$Arguments' (exit code: $ProcessExitCode)!" 
+            Exit 1
+        }
+    }
+ 
+    end {
+        Write-Verbose "END FUNCTION - $FunctionName" $LogFile
+    }
+}
+Export-ModuleMember -Function 'LC_ExecuteProcess'
 
-# Other helpful functions
+Function LC_InstallOrUninstallSoftware {
+    <#
+        .SYNOPSIS
+        Install or uninstall software (MSI or SETUP.exe)
+        .DESCRIPTION
+        Install or uninstall software (MSI or SETUP.exe)
+        .PARAMETER File
+        This parameter contains the file name including the path and file extension, for example 'C:\Temp\MyApp\Files\MyApp.msi' or 'C:\Temp\MyApp\Files\MyApp.exe'.
+        .PARAMETER Installationtype
+        This parameter contains the installation type, which is either 'Install' or 'Uninstall'.
+        .PARAMETER Arguments
+        This parameter contains the command line arguments. The arguments list can remain empty.
+        In case of an MSI, the following parameters are automatically included in the function and do not have
+        to be specified in the 'Arguments' parameter: /i (or /x) /qn /norestart /l*v "c:\Logs\MyLogFile.log"
+        .EXAMPLE
+        LC_InstallOrUninstallSoftware -File "C:\Temp\MyApp\Files\MyApp.msi" -InstallationType "Install" -Arguments ""
+        Installs the MSI package 'MyApp.msi' with no arguments (the function already includes the following default arguments: /i /qn /norestart /l*v $LogFile)
+        .Example
+        LC_InstallOrUninstallSoftware -File "C:\Temp\MyApp\Files\MyApp.msi" -InstallationType "Uninstall" -Arguments ""
+        Uninstalls the MSI package 'MyApp.msi' (the function already includes the following default arguments: /x /qn /norestart /l*v $LogFile)
+        .Example
+        LC_InstallOrUninstallSoftware -File "C:\Temp\MyApp\Files\MyApp.exe" -InstallationType "Install" -Arguments "/silent /logfile:C:\Logs\MyApp\log.log"
+        Installs the SETUP file 'MyApp.exe'
+    #>
+    [CmdletBinding()]
+    Param( 
+        [Parameter(Mandatory = $true, Position = 0)][String]$File,
+        [Parameter(Mandatory = $true, Position = 1)][AllowEmptyString()][String]$Installationtype,
+        [Parameter(Mandatory = $true, Position = 2)][AllowEmptyString()][String]$Arguments
+    )
+    
+    begin {
+        [string]$FunctionName = $PSCmdlet.MyInvocation.MyCommand.Name
+        Write-Verbose "START FUNCTION - $FunctionName"
+    }
+    
+    process {
+        $FileName = ($File.Split("\"))[-1]
+        $FileExt = $FileName.SubString(($FileName.Length) - 3, 3)
+ 
+        # Prepare variables
+        if ( !( $FileExt -eq "MSI") ) { $FileExt = "SETUP" }
+        if ( $Installationtype -eq "Uninstall" ) {
+            $Result1 = "uninstalled"
+            $Result2 = "uninstallation"
+        }
+        else {
+            $Result1 = "installed"
+            $Result2 = "installation"
+        }
+        $LogFileAPP = Join-path $LogDir ( "$($Installationtype)_$($FileName.Substring(0,($FileName.Length)-4))_$($FileExt).log" )
+     
+        # Check if the installation file exists
+        if (! (Test-Path $File) ) {    
+            Write-Host "The file '$File' does not exist!" 
+            Exit 1
+        }
+    
+        # Check if custom arguments were defined
+        if ([string]::IsNullOrEmpty($Arguments)) {
+            Write-Verbose "File arguments: <no arguments defined>"
+        }
+        Else {
+            Write-Verbose "File arguments: $Arguments"
+        }
+ 
+        # Install the MSI or SETUP.exe
+        if ( $FileExt -eq "MSI" ) {
+            if ( $Installationtype -eq "Uninstall" ) {
+                $FixedArguments = "/x ""$File"" /qn /norestart /l*v ""$LogFileAPP"""
+            }
+            else {
+                $FixedArguments = "/i ""$File"" /qn /norestart /l*v ""$LogFileAPP"""
+            }
+            if ([string]::IsNullOrEmpty($Arguments)) {
+                # check if custom arguments were defined
+                $arguments = $FixedArguments
+                Write-Verbose "Command line: Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru"
+                $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+            }
+            Else {
+                $arguments = $FixedArguments + " " + $arguments
+                Write-Verbose "Command line: Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru"
+                $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+            }
+        }
+        Else {
+            if ([string]::IsNullOrEmpty($Arguments)) {
+                # check if custom arguments were defined
+                Write-Verbose "Command line: Start-Process -FilePath ""$File"" -Wait -PassThru" 
+                $process = Start-Process -FilePath "$File" -Wait -PassThru
+            }
+            Else {
+                Write-Verbose "Command line: Start-Process -FilePath ""$File"" -ArgumentList $arguments -Wait -PassThru"
+                $process = Start-Process -FilePath "$File" -ArgumentList $arguments -Wait -PassThru
+            }
+        }
+ 
+        # Check the result (the exit code) of the installation
+        switch ($Process.ExitCode) {        
+            0 { Write-Host "The software was $Result1 successfully (exit code: 0)" }
+            3 { Write-Host "The software was $Result1 successfully (exit code: 3)" } # Some Citrix products exit with 3 instead of 0
+            1603 { Write-Host "A fatal error occurred (exit code: 1603). Some applications throw this error when the software is already (correctly) installed! Please check." }
+            1605 { Write-Host "The software is not currently installed on this machine (exit code: 1605)" }
+            1619 { 
+                Write-Host "The installation files cannot be found. The PS1 script should be in the root directory and all source files in the subdirectory 'Files' (exit code: 1619)"
+                Exit 1
+            }
+            3010 { Write-Host "A reboot is required (exit code: 3010)!" }
+            default { 
+                [string]$ExitCode = $Process.ExitCode
+                Write-Host "The $Result2 ended in an error (exit code: $ExitCode)!" 
+                Exit 1
+            }
+        }
+    }
+ 
+    end {
+        Write-Verbose "I" "END FUNCTION - $FunctionName"
+    }
+}
+Export-ModuleMember -Function 'LC_InstallOrUninstallSoftware'
+#endregion
+
+#region OTHER FUNCTIONS
 Function LC_IsAdmin {
     <#
         .SYNOPSIS
@@ -411,3 +577,82 @@ Function LC_IsAdmin {
 } #Endfunction LC_IsAdmin
 Export-ModuleMember -Function 'LC_IsAdmin'
 
+Function LC_SignScript {
+    <#
+        .SYNOPSIS
+        Digitally signs a PowerShell script using a code signing certificate.
+        .DESCRIPTION
+        Digitally signs a PowerShell script using a code signing certificate installed on the local machine.
+        .EXAMPLE
+        LC_SignScript .\MyScript.ps1
+
+        Description
+        -----------
+        Runs script with default values. If there is a single code signing certificate, it will be used. If there is more than one valid code signing certificate, a popup will display the certificates and allow one to be chosen.
+        .EXAMPLE
+        LC_SignScript .\MyScript.ps1 -CodeSigningCert 0
+
+        Description
+        -----------
+        Signs the specified script, MyScript.ps1, with the first code signing certificate found.
+        .INPUTS
+        None. You cannot pipe objects to this script.
+    #>
+    [CmdletBinding()]
+    param (
+        # Path (including file name) of script to sign
+        [parameter(ValueFromPipeline, ValueFromPipelineByPropertyName, Mandatory, HelpMessage = 'No filename specified')]
+        [ValidatePattern('.ps1$|.psm1$')]
+        [ValidateNotNullOrEmpty()]
+        [string] $FileName,
+		
+        # Index number of code signing certificate to use
+        [parameter(ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [string] $CodeSigningCerificate
+    ) 
+    BEGIN	{
+        [string]$FunctionName = $PSCmdlet.MyInvocation.MyCommand.Name
+        Write-Verbose "START FUNCTION - $FunctionName"
+        Write-Verbose -Message 'Getting certificate available for codesigning'
+        # [int] $totalvalidcerts = (Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object {$_.NotAfter -gt (Get-Date)}).length
+        [int] $totalvalidcerts = (Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Verify() }).length
+        if ($totalvalidcerts -eq 1) {
+            # [Security.Cryptography.X509Certificates.X509Certificate2] $cert = (Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object {$_.NotAfter -ge (Get-Date)})[0]
+            [Security.Cryptography.X509Certificates.X509Certificate2] $cert = (Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Verify() })[0]
+        }
+        elseif (($CodeSigningCerificate) -and ($totalvalidcerts -gt 1)) {
+            # [Security.Cryptography.X509Certificates.X509Certificate2] $cert = (Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object {$_.NotAfter -ge (Get-Date)})[$CodeSigningCerificate]
+            [Security.Cryptography.X509Certificates.X509Certificate2] $cert = (Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Verify() })[$CodeSigningCerificate]
+        }
+        else {
+            # [Security.Cryptography.X509Certificates.X509Certificate2] $cert = (Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object {$_.NotAfter -ge (Get-Date)} | Out-GridView -Title "Valid certificates" -OutputMode Single)[0]
+            [Security.Cryptography.X509Certificates.X509Certificate2] $cert = (Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Verify() } | Out-GridView -Title 'Valid certificates' -OutputMode Single)[0]
+        }
+    }
+    PROCESS	{
+        if ($cert) {
+            Write-Verbose -Message ('{0} valid certificate(s) found' -f $totalvalidcerts)
+            Write-Verbose -Message ('Signing "{0}" with {1}' -f $FileName, $cert)
+            $null = Set-AuthenticodeSignature -FilePath $FileName -Certificate $cert -TimestampServer 'http://timestamp.digicert.com'
+            Write-Verbose -Message 'Checking validity'
+            $valid = ((Get-AuthenticodeSignature -FilePath $FileName).status -Match 'Valid')
+            if ($valid) {
+                Write-Verbose -Message ('Signing {0} succeeded' -f $FileName)
+            }
+            else {
+                Write-Error -Message ('Signing {0} failed' -f $FileName)
+            }
+        }
+        else {
+            Write-Error -Message 'No valid codesigning certificate found'
+        }		
+    } # end process block
+    END	{
+        Remove-Variable -Name Valid
+        Remove-Variable -Name FileName
+        Remove-Variable -Name Cert
+        Write-Verbose "END FUNCTION - $FunctionName"
+    }
+}
+Export-ModuleMember -Function 'LC_SignScript'
+#endregion
