@@ -1,2 +1,2 @@
 write-host "Hello World"
-Get-Service > c:\test.txt
+Get-Service > c:\temp\test.txt
