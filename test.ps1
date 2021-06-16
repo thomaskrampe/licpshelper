@@ -1,2 +1,2 @@
 write-host "Hello World"
-Get-Service > c:\temp\test.txt
+write-host $env:username > c:\temp\test.txt
