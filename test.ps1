@@ -1,2 +1,3 @@
-write-host "Hello World"
-write-host $env:username > c:\test.txt
+$Name = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+Set-Content -Path C:\test.txt -Value $Name
+
